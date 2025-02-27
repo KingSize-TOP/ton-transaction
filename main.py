@@ -239,6 +239,11 @@ async def check_payment_status():
                     if not msg_data:
                         print(f"Transaction {tr.to_dict()} has no msg_data.")
                         continue
+                    memo = ''
+                    is_base64, decoded_bytes = is_base64_encoded(msg_data)
+
+                    if is_base64:
+                        memo = decoded_bytes
 
                     # Decode and deserialize the message data
                     boc_bytes = b64str_to_bytes(msg_data)
@@ -257,7 +262,7 @@ async def check_payment_status():
                         "status": tr.to_dict_user_friendly()["status"],
                         "time": formatted_time,
                         "hash": tr.to_dict()["hash"],
-                        "memo": "",
+                        "memo": memo,
                         "value": re,
                         "sender": sender
                     })
