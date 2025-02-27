@@ -218,57 +218,56 @@ async def check_wallet_balances():
 async def check_payment_status():
     provider = TonCenterClient()
     wallet = Wallet(provider=provider, address=MASTER_WALLET_ADDRESS)
-    # client = await get_client()
 
     try:
         await asyncio.sleep(5)
         trs = await wallet.get_transactions(limit=50)
-
     except GetMethodError as e:
-        print(f"Ошибка при получении seqno для кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
-
-    except (KeyError, json.JSONDecodeError) as e:
-        print(f"Ошибка при чтении баланса кошелька {MASTER_WALLET_ADDRESS}: {str(e)}")
-
+        print(f"Error fetching transactions for wallet {MASTER_WALLET_ADDRESS}: {str(e)}")
+        return {"error": "Failed to fetch transactions"}
     except Exception as e:
-        print(f"Неизвестная ошибка : {str(e)}")
+        print(f"Unknown error: {str(e)}")
+        return {"error": "An unknown error occurred"}
 
     filtered_transactions = []
 
     if trs:
-        # print(trs[0].to_dict())
-        # print('---------------------')
-        # cell = deserialize_boc(b64str_to_bytes(trs[0].to_dict()['in_msg'].get("msg_data")))
-        # tr_data = JettonTransferNotificationMessage(Slice(cell))
-        # re = tr_data.amount/1000000
-        # print(re)
-
-
         for tr in trs:
-
             if tr.to_dict_user_friendly()["type"] == 'in':
-                memo = ''
-                is_base64, decoded_bytes = is_base64_encoded(tr.to_dict()["in_msg"].get("msg_data"))
+                try:
+                    msg_data = tr.to_dict()["in_msg"].get("msg_data")
+                    if not msg_data:
+                        print(f"Transaction {tr.to_dict()} has no msg_data.")
+                        continue
 
-                if is_base64:
-                    memo = decoded_bytes
+                    # Decode and deserialize the message data
+                    boc_bytes = b64str_to_bytes(msg_data)
+                    cell = deserialize_boc(boc_bytes)
 
-                dt_object = datetime.utcfromtimestamp(tr.to_dict()["utime"])
-                formatted_time = dt_object.strftime('%H:%M %d-%m-%Y')
+                    # Process Jetton transfer notification
+                    tr_data = JettonTransferNotificationMessage(Slice(cell))
+                    re = tr_data.amount / 1000000  # Convert to TON amount
+                    sender = tr.to_dict()['in_msg']["source"]
 
-                cell = deserialize_boc(b64str_to_bytes(tr.to_dict()['in_msg'].get("msg_data")))
-                sender = tr.to_dict()['in_msg']["source"]
-                tr_data = JettonTransferNotificationMessage(Slice(cell))
-                re = tr_data.amount / 1000000
+                    # Format transaction details
+                    dt_object = datetime.utcfromtimestamp(tr.to_dict()["utime"])
+                    formatted_time = dt_object.strftime('%H:%M %d-%m-%Y')
 
-                filtered_transactions.append({
-                    "status": tr.to_dict_user_friendly()["status"],
-                    "time": formatted_time,
-                    "hash": tr.to_dict()["hash"],
-                    "memo": memo,
-                    "value": re,
-                    "sender": sender
-                })
+                    filtered_transactions.append({
+                        "status": tr.to_dict_user_friendly()["status"],
+                        "time": formatted_time,
+                        "hash": tr.to_dict()["hash"],
+                        "memo": "",
+                        "value": re,
+                        "sender": sender
+                    })
+                except ValueError as e:
+                    print(f"Non-Jetton transaction or unexpected prefix: {str(e)}")
+                    continue
+                except Exception as e:
+                    print(f"Error processing transaction: {str(e)}")
+                    continue
+
         return {"return": filtered_transactions}
 
     return {"status": "0"}
